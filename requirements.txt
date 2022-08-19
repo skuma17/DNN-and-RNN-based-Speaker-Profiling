@@ -1,0 +1,10 @@
+speechbrain
+wavencoder
+torch>=1.7
+torchaudio>=0.7.2
+pytorch-lightning>=1.1.5
+sklearn
+torch-optimizer
+torchmetrics
+wandb
+tensorboardX
