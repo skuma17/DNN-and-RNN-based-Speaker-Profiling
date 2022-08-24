@@ -18,7 +18,7 @@ class NISPDataset(Dataset):
         is_train=True,
         noise_dataset_path=None
         ):
-
+        
         self.wav_folder = wav_folder
         self.files = os.listdir(self.wav_folder)
         self.csv_file = csv_file
@@ -35,7 +35,6 @@ class NISPDataset(Dataset):
                         'malayalam':3,
                         'Kannada':4 }
         
-        self.compute_xvect = Xvector('gpu')
 
         if self.noise_dataset_path:
 
@@ -43,14 +42,15 @@ class NISPDataset(Dataset):
                 wavencoder.transforms.PadCrop(pad_crop_length=self.wav_len, pad_position='left', crop_position='random'),
                 wavencoder.transforms.AdditiveNoise(self.noise_dataset_path, p=0.5),
                 wavencoder.transforms.Clipping(p=0.5),
+                wavencoder.transforms.SpeedChange(factor_range=(-0.5, 0.0), p=0.5),                
                 ])
         else:
-          self.train_transform = wavencoder.transforms.Compose([
+            self.train_transform = wavencoder.transforms.Compose([
                   wavencoder.transforms.PadCrop(pad_crop_length=self.wav_len, pad_position='left', crop_position='random'),
                   wavencoder.transforms.Clipping(p=0.5),
                   ])
 
-          self.test_transform = wavencoder.transforms.Compose([
+            self.test_transform = wavencoder.transforms.Compose([
               wavencoder.transforms.PadCrop(pad_crop_length=self.wav_len)
               ])
 
@@ -63,19 +63,18 @@ class NISPDataset(Dataset):
         
         file = self.files[idx]
         id = file[:8]
-
+        
         wav, sample_rate = torchaudio.load(os.path.join(self.wav_folder, file))
 
-#        wav = torchaudio.transforms.MFCC()(wav)
-
+        if sample_rate != 16000:
+            wav = torchaudio.functional.resample(wav, sample_rate, 16000)
+        
+        
         if self.is_train:
             wav = self.train_transform(wav)
         else:
             wav = self.test_transform(wav)
           
-
-#        wav_xvector = self.compute_xvect(wav.transpose(1,2))  
-
 
         df_row = self.df[self.df['Speaker_ID'] == id]
         gender = self.gender_dict[str(df_row['Gender'].values.item())]
@@ -88,5 +87,4 @@ class NISPDataset(Dataset):
 
         height = (height - self.df['Height'].mean())/self.df['Height'].std()
         age = (age - self.df['Age'].mean())/self.df['Age'].std()
-#        return wav_xvector, native_languages, age, gender
         return wav, native_languages, age, gender

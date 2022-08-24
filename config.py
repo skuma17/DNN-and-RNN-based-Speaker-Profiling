@@ -16,7 +16,7 @@ class NISPConfig(object):
     input_dim = 257
 
     batch_size = 128
-    epochs = 20
+    epochs = 50
     
     # loss = alpha * height_loss + beta * age_loss + gamma * gender_loss
     alpha = 1

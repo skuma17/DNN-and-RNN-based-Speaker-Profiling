@@ -9,13 +9,15 @@ import torchmetrics
 from pytorch_lightning import LightningModule
 import pytorch_lightning as pl
 
-from torchmetrics import Accuracy
+from torchmetrics import Accuracy, ConfusionMatrix
+from torchmetrics import F1Score, AUROC
 from torchmetrics import MeanSquaredError  as MSE
 from torchmetrics import MeanAbsoluteError as MAE
 
 
-from models import Wav2VecXectorLSTM
+
 from models import Wav2VecLSTM_Base
+from models import SpeechBrainLSTM
 
 
 import pandas as pd
@@ -34,8 +36,17 @@ class LightningModel(pl.LightningModule):
         super(LightningModel, self).__init__()
         # HPARAMS
         self.save_hyperparameters()
-        #self.model = Wav2VecXectorLSTM(HPARAMS['model_hidden_size'])
-        self.model = Wav2VecLSTM_Base(HPARAMS['model_hidden_size'])
+        self.model = SpeechBrainLSTM(HPARAMS['model_hidden_size'])
+        #self.model = Wav2VecLSTM_Base(HPARAMS['model_hidden_size'])
+
+        self.ConfutionMatrix_MultiClass_criterion = ConfusionMatrix(num_classes=5)
+        self.ConfutionMatrix_BinaryClass_criterion = ConfusionMatrix(num_classes=2, threshold=0.5, Multilabel=False )
+        self.F1_criterion = F1Score(number_classes=5,
+        average="micro")
+        self.AUC_criterion = AUROC(num_classes=5,
+        average="micro")
+
+        self.nl_numclass = 5
 
         self.classification_criterion = MSE()
         self.regression_criterion = MSE()
@@ -90,6 +101,13 @@ class LightningModel(pl.LightningModule):
         age_mae =self.mae_criterion(y_hat_a*self.a_std+self.a_mean, y_a*self.a_std+self.a_mean)
         age_rmse =self.rmse_criterion(y_hat_a*self.a_std+self.a_mean, y_a*self.a_std+self.a_mean)
         gender_acc = self.accuracy((y_hat_g>0.5).long(), y_g.long())
+        nl_F1Score = self.F1_criterion(y_hat_nl.float(), y_nl)
+        g_F1Score = self.F1_criterion((y_hat_g>0.5).long(), y_g.long())
+        
+        #y_hat_nl = y_hat_nl.argmax(axis=1)
+        #nl_confmatrix = self.ConfutionMatrix_MultiClass_criterion.update(y_hat_nl, y_nl )
+        #g_confmatrix = self.ConfutionMatrix_BinaryClass_criterion.update(y_hat_g, y_g)
+        #nl_auroc = self.AUC_criterion(y_hat_nl.float(), y_nl)
 
         self.log('train_loss', loss, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
 
@@ -98,6 +116,11 @@ class LightningModel(pl.LightningModule):
                 'train_age_mae':age_mae.item(),
                 'train_age_rmse':age_rmse.item(),
                 'train_gender_acc':gender_acc,
+                'train_nl_F1score':nl_F1Score,
+                'train_g_F1score':g_F1Score,
+#                'train_nl_Confmatrix':nl_confmatrix,
+#                'train_g_Confmatrix':g_confmatrix,
+#                'train_nl_auroc':nl_auroc,
                  }
     
     def training_epoch_end(self, outputs):
@@ -108,12 +131,22 @@ class LightningModel(pl.LightningModule):
         age_mae = torch.tensor([x['train_age_mae'] for x in outputs]).sum()/n_batch
         age_rmse = torch.tensor([x['train_age_rmse'] for x in outputs]).sum()/n_batch
         gender_acc = torch.tensor([x['train_gender_acc'] for x in outputs]).mean()
+        nl_F1Score = torch.tensor([x['train_nl_F1score'] for x in outputs]).mean()
+        g_F1Score = torch.tensor([x['train_g_F1score'] for x in outputs]).mean()
+        #nl_confmatrix = torch.tensor([x['train_nl_Confmatrix'] for x in outputs]).mean()
+        #nl_confmatrix = self.ConfutionMatrix_MultiClass_criterion.compute()
+        #g_confmatrix = self.ConfutionMatrix_BinaryClass_criterion.compute()
+        #nl_auroc = torch.tensor([x['train_nl_auroc'] for x in outputs]).mean()
 
         self.log('epoch_loss' , loss, prog_bar=True, sync_dist=True)
-        self.log('nl_acc',native_languages_acc, prog_bar=True, sync_dist=True)
-        self.log('a_mae',age_mae.item(), prog_bar=True, sync_dist=True)
-        self.log('a_rmse',age_rmse.item(), prog_bar=True, sync_dist=True)
-        self.log('g_acc',gender_acc, prog_bar=True, sync_dist=True)
+        self.log('native-language accuracy',native_languages_acc, prog_bar=True, sync_dist=True)
+        self.log('Age_mae',age_mae.item(), prog_bar=True, sync_dist=True)
+        self.log('Age_rmse',age_rmse.item(), prog_bar=True, sync_dist=True)
+        self.log('gender_accuracy',gender_acc, prog_bar=True, sync_dist=True)
+        self.log('native-language F1Score',nl_F1Score, prog_bar=True, sync_dist=True)
+        self.log('gender F1Score',g_F1Score, prog_bar=True, sync_dist=True)
+        #self.log('g_Confmatrix',g_confmatrix, prog_bar=True, sync_dist=True)
+        #self.log('nl_auroc',nl_auroc, prog_bar=True, sync_dist=True)
 
     def validation_step(self, batch, batch_idx):
         x, y_nl, y_a, y_g = batch       
@@ -168,13 +201,17 @@ class LightningModel(pl.LightningModule):
         idx = y_g.view(-1).long()
         female_idx = torch.nonzero(idx).view(-1)
         male_idx = torch.nonzero(1-idx).view(-1)
-
+        
         male_age_mae = self.mae_criterion(y_hat_a[male_idx]*self.a_std+self.a_mean, y_a[male_idx]*self.a_std+self.a_mean)      
+        male_age_mae = torch.nan_to_num(male_age_mae)
         female_age_mae = self.mae_criterion(y_hat_a[female_idx]*self.a_std+self.a_mean, y_a[female_idx]*self.a_std+self.a_mean)
-
+        female_age_mae = torch.nan_to_num(female_age_mae)
+        
         male_age_rmse = self.rmse_criterion(y_hat_a[male_idx]*self.a_std+self.a_mean, y_a[male_idx]*self.a_std+self.a_mean)
+        male_age_rmse = torch.nan_to_num(male_age_rmse)
         female_age_rmse = self.rmse_criterion(y_hat_a[female_idx]*self.a_std+self.a_mean, y_a[female_idx]*self.a_std+self.a_mean)
-
+        female_age_rmse = torch.nan_to_num(female_age_rmse)
+        
         return {
                 'test_native_languages_acc':native_languages_acc,
                 'male_age_mae':male_age_mae.item(),

@@ -111,6 +111,9 @@ if __name__ == "__main__":
 
     print('Dataset Split (Train, Validation, Test)=', len(train_set), len(valid_set), len(test_set))
 
+  #  device = "cuda" if torch.cuda.is_available() else "cpu"
+  #  print(f"Using {device} device")
+
     #Training the Model
      
     wandb_logger = WandbLogger(project="SpeakerProfiling",log_model="all")   
@@ -124,7 +127,7 @@ if __name__ == "__main__":
     early_stop= EarlyStopping(
                         monitor='v_loss',
                         min_delta=0.00,
-                        patience=10,
+                        patience=20,
                         verbose=True,
                         mode='min' )
 

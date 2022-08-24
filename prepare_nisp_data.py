@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 import pytorch_lightning as pl
 
 parser = ArgumentParser(add_help=True)
-#parser.add_argument('--path', type=str, default="C:\\Users\\tsati\\OneDrive\\Documents\\upgrad\\project\\SpeakerProfiling-main\\NISP-Dataset")
+#parser.add_argument('--path', type=str, default="..\\NISP-Dataset")
 #parser = pl.Trainer.add_argparse_args(parser)
 hparams = parser.parse_args()
 
@@ -21,7 +21,7 @@ hparams = parser.parse_args()
 parser = argparse.ArgumentParser(description='Path to the NISP dataset folder')
 parser.add_argument('--path',                  
                        type=str,
-                       default="C:\\Users\\tsati\\OneDrive\\Documents\\upgrad\\project\\SpeakerProfiling-main\\NISP-Dataset",
+                       default="..\\NISP-Dataset",
                        help='the path to NISP dataset folder')
 hparams = parser.parse_args()
 
@@ -34,7 +34,7 @@ print(data_path)
 lang_dirs = [x for x in os.listdir(data_path) if os.path.isdir(os.path.join(data_path, x))]
 print(lang_dirs)
 final_tar_path = os.path.join(data_path, 'final_tars')
-'''
+
 if not os.path.exists(final_tar_path): os.mkdir(final_tar_path)
 
 tmp_tar_file = os.path.join(final_tar_path, 'tmp_tar_file.tar.gz')
@@ -67,7 +67,6 @@ for lang_fol in lang_dirs:
 
         os.remove(tmp_tar_file2)
         print(tmp_path)
-'''
 
 #########
 # 2. Arrange wav files into Train/Test/Validation sets
